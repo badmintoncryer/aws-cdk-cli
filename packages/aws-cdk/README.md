@@ -1348,6 +1348,25 @@ In order to remove that permissions boundary you have to specify the
 cdk bootstrap --no-previous-parameters
 ```
 
+#### Bootstrapping without IAM roles
+
+Some organizations do not allow the people or pipelines that deploy CDK apps to create IAM roles. In that case,
+use `--staging-resources-only` to create only the staging resources: the file asset bucket (and its KMS key, if
+any), the container asset repository and the bootstrap version parameter. None of the IAM roles are created.
+
+```console
+cdk bootstrap --staging-resources-only
+```
+
+Deploy to such an environment with the
+[`CliCredentialsStackSynthesizer`](https://docs.aws.amazon.com/cdk/api/v2/docs/aws-cdk-lib.CliCredentialsStackSynthesizer.html),
+which uses the credentials of the CLI instead of assuming the bootstrap roles. Because no roles are created,
+`--staging-resources-only` cannot be combined with `--trust`, `--trust-for-lookup`,
+`--cloudformation-execution-policies` or the permissions boundary options.
+
+Running `--staging-resources-only` against an existing bootstrap stack removes its IAM roles. Use
+`--no-staging-resources-only` to create them again.
+
 ### `cdk gc`
 
 CDK Garbage Collection.

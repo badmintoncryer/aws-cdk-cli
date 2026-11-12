@@ -433,6 +433,11 @@ export interface CdkModernBootstrapCommandOptions extends CommonCdkBootstrapComm
   /**
    * @default undefined
    */
+  readonly stagingResourcesOnly?: boolean;
+
+  /**
+   * @default undefined
+   */
   readonly usePreviousParameters?: boolean;
 
   readonly trust?: string[];
@@ -726,6 +731,9 @@ export class TestFixture extends ShellHelper {
     }
     if (options.denyExternalId !== undefined) {
       args.push(options.denyExternalId ? '--deny-external-id' : '--no-deny-external-id');
+    }
+    if (options.stagingResourcesOnly !== undefined) {
+      args.push(options.stagingResourcesOnly ? '--staging-resources-only' : '--no-staging-resources-only');
     }
 
     if (options.usePreviousParameters === false) {

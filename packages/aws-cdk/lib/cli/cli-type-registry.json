@@ -257,6 +257,10 @@
           "type": "boolean",
           "desc": "Apply the permissions boundary to all bootstrap roles (not just the CloudFormation execution role)."
         },
+        "staging-resources-only": {
+          "type": "boolean",
+          "desc": "Create only the staging resources (asset bucket and container asset repository), without any IAM roles. Use with the CliCredentialsStackSynthesizer."
+        },
         "bootstrap-customer-key": {
           "type": "boolean",
           "desc": "Create a Customer Master Key (CMK) for the bootstrap bucket (you will be charged but can customize permissions, modern bootstrapping only)",

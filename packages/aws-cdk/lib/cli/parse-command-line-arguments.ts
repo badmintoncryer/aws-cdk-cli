@@ -269,6 +269,11 @@ export function parseCommandLineArguments(args: Array<string>): any {
           type: 'boolean',
           desc: 'Apply the permissions boundary to all bootstrap roles (not just the CloudFormation execution role).',
         })
+        .option('staging-resources-only', {
+          default: undefined,
+          type: 'boolean',
+          desc: 'Create only the staging resources (asset bucket and container asset repository), without any IAM roles. Use with the CliCredentialsStackSynthesizer.',
+        })
         .option('bootstrap-customer-key', {
           default: undefined,
           type: 'boolean',

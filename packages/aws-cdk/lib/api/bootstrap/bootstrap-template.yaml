@@ -73,6 +73,16 @@ Parameters:
     Default: 'true'
     AllowedValues: ['true', 'false']
     Description: Whether to deny AssumeRole calls with an ExternalId. This prevents calls that are intended to be deputized from accidentally assuming CDK Roles.
+  StagingResourcesOnly:
+    # Some organizations do not allow the identity that bootstraps an environment
+    # to create IAM roles. Set this to 'true' to create only the staging resources
+    # (file asset bucket, container asset repository and version parameter), and
+    # none of the IAM roles or policies. Such an environment can be deployed to
+    # with the CliCredentialsStackSynthesizer.
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+    Description: Whether to create only the staging resources (asset bucket, container asset repository and version parameter), without any IAM roles.
 Conditions:
   HasTrustedAccounts:
     Fn::Not:
@@ -108,10 +118,16 @@ Conditions:
     Fn::Equals:
       - 'AWS_MANAGED_KEY'
       - Ref: FileAssetsBucketKmsKeyId
-  ShouldCreatePermissionsBoundary:
+  ShouldCreateIamRoles:
     Fn::Equals:
-      - 'true'
-      - Ref: UseExamplePermissionsBoundary
+      - 'false'
+      - Ref: StagingResourcesOnly
+  ShouldCreatePermissionsBoundary:
+    Fn::And:
+      - Condition: ShouldCreateIamRoles
+      - Fn::Equals:
+        - 'true'
+        - Ref: UseExamplePermissionsBoundary
   PermissionsBoundarySet:
     Fn::Not:
       - Fn::Equals:
@@ -181,17 +197,20 @@ Resources:
                   Ref: AWS::AccountId
                 kms:ViaService:
                   - Fn::Sub: s3.${AWS::Region}.amazonaws.com
-          - Action:
-              - kms:Decrypt
-              - kms:DescribeKey
-              - kms:Encrypt
-              - kms:ReEncrypt*
-              - kms:GenerateDataKey*
-            Effect: Allow
-            Principal:
-              AWS:
-                Fn::Sub: "${FilePublishingRole.Arn}"
-            Resource: "*"
+          - Fn::If:
+              - ShouldCreateIamRoles
+              - Action:
+                  - kms:Decrypt
+                  - kms:DescribeKey
+                  - kms:Encrypt
+                  - kms:ReEncrypt*
+                  - kms:GenerateDataKey*
+                Effect: Allow
+                Principal:
+                  AWS:
+                    Fn::Sub: "${FilePublishingRole.Arn}"
+                Resource: "*"
+              - Ref: AWS::NoValue
     Condition: CreateNewKey
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
@@ -319,6 +338,7 @@ Resources:
               StringLike:
                 "aws:sourceArn": { "Fn::Sub": "arn:${AWS::Partition}:emr-serverless:${AWS::Region}:${AWS::AccountId}:/applications/*" }
   FilePublishingRole:
+    Condition: ShouldCreateIamRoles
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
@@ -378,6 +398,7 @@ Resources:
         - Key: aws-cdk:bootstrap-role
           Value: file-publishing
   ImagePublishingRole:
+    Condition: ShouldCreateIamRoles
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
@@ -437,6 +458,7 @@ Resources:
         - Key: aws-cdk:bootstrap-role
           Value: image-publishing
   LookupRole:
+    Condition: ShouldCreateIamRoles
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
@@ -534,6 +556,7 @@ Resources:
         - Key: aws-cdk:bootstrap-role
           Value: lookup
   FilePublishingRoleDefaultPolicy:
+    Condition: ShouldCreateIamRoles
     Type: AWS::IAM::Policy
     Properties:
       PolicyDocument:
@@ -572,6 +595,7 @@ Resources:
       PolicyName:
         Fn::Sub: cdk-${Qualifier}-file-publishing-role-default-policy-${AWS::AccountId}-${AWS::Region}
   ImagePublishingRoleDefaultPolicy:
+    Condition: ShouldCreateIamRoles
     Type: AWS::IAM::Policy
     Properties:
       PolicyDocument:
@@ -599,6 +623,7 @@ Resources:
       PolicyName:
         Fn::Sub: cdk-${Qualifier}-image-publishing-role-default-policy-${AWS::AccountId}-${AWS::Region}
   DeploymentActionRole:
+    Condition: ShouldCreateIamRoles
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
@@ -747,6 +772,7 @@ Resources:
         - Key: aws-cdk:bootstrap-role
           Value: deploy
   CloudFormationExecutionRole:
+    Condition: ShouldCreateIamRoles
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
@@ -837,7 +863,7 @@ Resources:
       Name:
         Fn::Sub: '/cdk-bootstrap/${Qualifier}/version'
       # Also update this value below (see comment there)
-      Value: '33'
+      Value: '34'
 Outputs:
   BucketName:
     Description: The name of the S3 bucket owned by the CDK toolkit stack
@@ -872,4 +898,4 @@ Outputs:
     # {Fn::GetAtt} on an SSM Parameter is eventually consistent, and can fail with "parameter
     # doesn't exist" even after just having been created. To reduce our deploy failure rate, we
     # duplicate the value here and use a build-time test to ensure the two values are the same.
-    Value: '33'
+    Value: '34'

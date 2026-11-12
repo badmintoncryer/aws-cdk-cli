@@ -1098,4 +1098,150 @@ describe('Bootstrapping v2', () => {
       expect(cfnRole.Properties.PermissionsBoundary['Fn::If'][0]).toBe('PermissionsBoundarySet');
     });
   });
+
+  describe('StagingResourcesOnly', () => {
+    const stderrText = () => stderrMock.mock.calls.map(call => String(call[0])).join('');
+
+    test.each([true, false])('passes StagingResourcesOnly parameter as %p', async (stagingResourcesOnly) => {
+      await bootstrapper.bootstrapEnvironment(env, sdk, {
+        parameters: { stagingResourcesOnly },
+      });
+
+      expect(mockDeployStack).toHaveBeenCalledWith(
+        expect.objectContaining({
+          parameters: expect.objectContaining({
+            StagingResourcesOnly: `${stagingResourcesOnly}`,
+          }),
+        }),
+        expect.anything(),
+      );
+    });
+
+    test('StagingResourcesOnly parameter is not present by default', async () => {
+      await bootstrapper.bootstrapEnvironment(env, sdk, { parameters: {} });
+
+      expect(mockDeployStack).toHaveBeenCalledWith(
+        expect.objectContaining({
+          parameters: expect.not.objectContaining({
+            StagingResourcesOnly: expect.anything(),
+          }),
+        }),
+        expect.anything(),
+      );
+    });
+
+    test('does not report or validate role settings', async () => {
+      await bootstrapper.bootstrapEnvironment(env, sdk, {
+        parameters: { stagingResourcesOnly: true },
+      });
+
+      const output = stderrText();
+      expect(output).toContain('Creating only the staging resources. No IAM roles will be created.');
+      expect(output).not.toContain('Using default execution policy');
+      expect(output).not.toContain('Trusted accounts for deployment');
+    });
+
+    test('keeps validating role settings when re-enabling the roles', async () => {
+      mockTheToolkitInfo({
+        Parameters: [
+          { ParameterKey: 'StagingResourcesOnly', ParameterValue: 'true' },
+          { ParameterKey: 'TrustedAccounts', ParameterValue: '111111111111' },
+        ],
+      });
+
+      await expect(bootstrapper.bootstrapEnvironment(env, sdk, {
+        parameters: { stagingResourcesOnly: false },
+      })).rejects.toThrow(/--cloudformation-execution-policies/);
+    });
+
+    test('reuses the previous value when the flag is not given', async () => {
+      mockTheToolkitInfo({
+        Parameters: [
+          { ParameterKey: 'StagingResourcesOnly', ParameterValue: 'true' },
+          { ParameterKey: 'TrustedAccounts', ParameterValue: '111111111111' },
+        ],
+      });
+
+      // Would fail with MissingExecutionPoliciesForTrust if the roles were going to be created
+      await bootstrapper.bootstrapEnvironment(env, sdk, { parameters: {} });
+
+      expect(stderrText()).toContain('Creating only the staging resources. No IAM roles will be created.');
+      expect(mockDeployStack).toHaveBeenCalledWith(
+        expect.objectContaining({
+          parameters: expect.not.objectContaining({
+            StagingResourcesOnly: expect.anything(),
+          }),
+          usePreviousParameters: true,
+        }),
+        expect.anything(),
+      );
+    });
+
+    test.each([
+      ['--trust', { trustedAccounts: ['111111111111'], cloudFormationExecutionPolicies: [] }],
+      ['--trust-for-lookup', { trustedAccountsForLookup: ['111111111111'] }],
+      ['--cloudformation-execution-policies', { cloudFormationExecutionPolicies: ['arn:policy'] }],
+      ['--example-permissions-boundary', { examplePermissionsBoundary: true }],
+      ['--custom-permissions-boundary', { customPermissionsBoundary: 'my-boundary' }],
+      ['--apply-permissions-boundary-to-all-roles', { applyPermissionsBoundaryToAllRoles: true }],
+    ])('cannot be combined with %s', async (flag, parameters) => {
+      await expect(bootstrapper.bootstrapEnvironment(env, sdk, {
+        parameters: { stagingResourcesOnly: true, ...parameters },
+      })).rejects.toThrow(`--staging-resources-only does not create any IAM roles, so it cannot be combined with ${flag}`);
+
+      expect(mockDeployStack).not.toHaveBeenCalled();
+      expect(mockIAMClient).not.toHaveReceivedCommand(CreatePolicyCommand);
+    });
+
+    test('can be combined with options that do not configure roles', async () => {
+      await bootstrapper.bootstrapEnvironment(env, sdk, {
+        parameters: {
+          stagingResourcesOnly: true,
+          bucketName: 'my-bucket',
+          createCustomerMasterKey: true,
+          qualifier: 'abcdef',
+          applyPermissionsBoundaryToAllRoles: false,
+        },
+      });
+
+      expect(mockDeployStack).toHaveBeenCalledWith(
+        expect.objectContaining({
+          parameters: expect.objectContaining({
+            StagingResourcesOnly: 'true',
+            FileAssetsBucketName: 'my-bucket',
+            FileAssetsBucketKmsKeyId: '',
+            Qualifier: 'abcdef',
+          }),
+        }),
+        expect.anything(),
+      );
+    });
+
+    describe('with a custom template that does not declare StagingResourcesOnly', () => {
+      const legacyTemplateBootstrapper = () => new Bootstrapper({
+        source: 'custom',
+        templateFile: path.join(__dirname, '..', '..', 'actions', '_fixtures', 'custom-bootstrap-template.yaml'),
+      }, ioHelper);
+
+      test('fails when stagingResourcesOnly is requested', async () => {
+        await expect(legacyTemplateBootstrapper().bootstrapEnvironment(env, sdk, {
+          parameters: { stagingResourcesOnly: true },
+        })).rejects.toThrow(/does not accept the StagingResourcesOnly parameter/);
+      });
+
+      test('does not pass the parameter when the flag is not set', async () => {
+        await legacyTemplateBootstrapper().bootstrapEnvironment(env, sdk, { parameters: {} });
+
+        expect(mockDeployStack).toHaveBeenCalledWith(
+          expect.objectContaining({
+            parameters: expect.not.objectContaining({
+              StagingResourcesOnly: expect.anything(),
+            }),
+          }),
+          expect.anything(),
+        );
+      });
+    });
+  });
 });
+

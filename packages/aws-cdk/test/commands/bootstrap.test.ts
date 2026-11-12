@@ -72,6 +72,25 @@ describe('cdk bootstrap', () => {
       }),
     );
   });
+
+  test.each([
+    ['--staging-resources-only', true],
+    ['--no-staging-resources-only', false],
+    [undefined, undefined],
+  ])('passes stagingResourcesOnly for %p', async (flag, expected) => {
+    bootstrapEnvironmentMock.mockResolvedValueOnce({
+      noOp: false,
+      outputs: {},
+      type: 'did-deploy-stack',
+      stackArn: 'fake-arn',
+      deleteFailures: [],
+      stabilizingResources: [],
+    });
+
+    await exec(['bootstrap', 'aws://123456789012/us-east-1', ...(flag ? [flag] : [])]);
+    expect(bootstrapEnvironmentMock).toHaveBeenCalledTimes(1);
+    expect(bootstrapEnvironmentMock.mock.calls[0][2]?.parameters?.stagingResourcesOnly).toBe(expected);
+  });
 });
 
 describe('cdk bootstrap --show-template', () => {

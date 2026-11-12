@@ -531,6 +531,13 @@ export interface BootstrapOptions {
   readonly applyPermissionsBoundaryToAllRoles?: boolean;
 
   /**
+   * Create only the staging resources (asset bucket and container asset repository), without any IAM roles. Use with the CliCredentialsStackSynthesizer.
+   *
+   * @default - undefined
+   */
+  readonly stagingResourcesOnly?: boolean;
+
+  /**
    * Create a Customer Master Key (CMK) for the bootstrap bucket (you will be charged but can customize permissions, modern bootstrapping only)
    *
    * @default - undefined

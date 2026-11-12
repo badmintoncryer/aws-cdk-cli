@@ -445,6 +445,7 @@ export async function exec(args: string[], synthesizer?: Synthesizer): Promise<n
             examplePermissionsBoundary: argv.examplePermissionsBoundary,
             customPermissionsBoundary: argv.customPermissionsBoundary,
             applyPermissionsBoundaryToAllRoles: args.applyPermissionsBoundaryToAllRoles,
+            stagingResourcesOnly: args.stagingResourcesOnly,
             trustedAccounts: arrayFromYargs(args.trust),
             trustedAccountsForLookup: arrayFromYargs(args.trustForLookup),
             untrustedAccounts: arrayFromYargs(args.untrust),

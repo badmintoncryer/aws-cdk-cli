@@ -91,10 +91,23 @@ export class Bootstrapper {
     const params = options.parameters ?? {};
 
     const bootstrapTemplate = await this.loadTemplate();
+    const templateParameters = await this.templateParameters();
 
     const toolkitStackName = options.toolkitStackName ?? DEFAULT_TOOLKIT_STACK_NAME;
     const current = await BootstrapStack.lookup(sdkProvider, environment, toolkitStackName, this.ioHelper);
     const partition = await current.partition();
+
+    if (params.stagingResourcesOnly !== undefined && !templateParameters.includes('StagingResourcesOnly')) {
+      throw new ToolkitError('StagingResourcesOnlyNotSupported', 'The selected bootstrap template does not accept the StagingResourcesOnly parameter');
+    }
+
+    // When the flag is not given, the value from the previous deployment is reused, like all other template parameters
+    const stagingResourcesOnly = params.stagingResourcesOnly
+      ?? (templateParameters.includes('StagingResourcesOnly') && current.parameters.StagingResourcesOnly === 'true');
+    if (stagingResourcesOnly) {
+      validateStagingResourcesOnly(params);
+      await this.ioHelper.defaults.info('Creating only the staging resources. No IAM roles will be created.');
+    }
 
     if (params.createCustomerMasterKey !== undefined && params.kmsKeyId) {
       throw new ToolkitError(
@@ -124,45 +137,15 @@ export class Bootstrapper {
       accounts.filter(acc => !params.untrustedAccounts?.map(String).includes(String(acc)));
 
     const trustedAccounts = removeUntrusted(params.trustedAccounts ?? splitCfnArray(current.parameters.TrustedAccounts));
-    await this.ioHelper.defaults.info(
-      `Trusted accounts for deployment: ${trustedAccounts.length > 0 ? trustedAccounts.join(', ') : '(none)'}`,
-    );
-
     const trustedAccountsForLookup = removeUntrusted(
       params.trustedAccountsForLookup ?? splitCfnArray(current.parameters.TrustedAccountsForLookup),
     );
-    await this.ioHelper.defaults.info(
-      `Trusted accounts for lookup: ${trustedAccountsForLookup.length > 0 ? trustedAccountsForLookup.join(', ') : '(none)'}`,
-    );
-
     const cloudFormationExecutionPolicies =
       params.cloudFormationExecutionPolicies ?? splitCfnArray(current.parameters.CloudFormationExecutionPolicies);
-    if (trustedAccounts.length === 0 && cloudFormationExecutionPolicies.length === 0) {
-      // For self-trust it's okay to default to AdministratorAccess, and it improves the usability of bootstrapping a lot.
-      //
-      // We don't actually make the implicitly policy a physical parameter. The template will infer it instead,
-      // we simply do the UI advertising that behavior here.
-      //
-      // If we DID make it an explicit parameter, we wouldn't be able to tell the difference between whether
-      // we inferred it or whether the user told us, and the sequence:
-      //
-      // $ cdk bootstrap
-      // $ cdk bootstrap --trust 1234
-      //
-      // Would leave AdministratorAccess policies with a trust relationship, without the user explicitly
-      // approving the trust policy.
-      const implicitPolicy = `arn:${partition}:iam::aws:policy/AdministratorAccess`;
-      await this.ioHelper.defaults.warn(
-        `Using default execution policy of '${implicitPolicy}'. Pass '--cloudformation-execution-policies' to customize.`,
-      );
-    } else if (cloudFormationExecutionPolicies.length === 0) {
-      throw new ToolkitError(
-        'MissingExecutionPoliciesForTrust',
-        `Please pass \'--cloudformation-execution-policies\' when using \'--trust\' to specify deployment permissions. Try a managed policy of the form \'arn:${partition}:iam::aws:policy/<PolicyName>\'.`,
-      );
-    } else {
-      // Remind people what the current settings are
-      await this.ioHelper.defaults.info(`Execution policies: ${cloudFormationExecutionPolicies.join(', ')}`);
+
+    // Without IAM roles there is nothing to trust and no execution policy to validate or advertise
+    if (!stagingResourcesOnly) {
+      await this.validateRoleSettings(partition, trustedAccounts, trustedAccountsForLookup, cloudFormationExecutionPolicies);
     }
 
     // * If an ARN is given, that ARN. Otherwise:
@@ -199,7 +182,7 @@ export class Bootstrapper {
       const sdk = (await sdkProvider.forEnvironment(environment, Mode.ForWriting)).sdk;
       policyName = await this.getPolicyName(environment, sdk, inputPolicyName, partition, params);
     }
-    if (currentPermissionsBoundary !== policyName) {
+    if (!stagingResourcesOnly && currentPermissionsBoundary !== policyName) {
       if (!currentPermissionsBoundary) {
         await this.ioHelper.defaults.warn(
           `Adding new permissions boundary ${policyName}`,
@@ -237,8 +220,6 @@ export class Bootstrapper {
       InputPermissionsBoundary: policyName,
     };
 
-    const templateParameters = await this.templateParameters();
-
     // Conditionally set these parameters: only set these parameters if they are accepted by the template.
     // If we pass them unconditionally, older customized templates that don't know about these
     // parameters yet will fail to deploy.
@@ -254,11 +235,59 @@ export class Bootstrapper {
       }
       bootstrapTemplateParameters.ApplyPermissionsBoundaryToAllRoles = `${params.applyPermissionsBoundaryToAllRoles}`;
     }
+    if (params.stagingResourcesOnly !== undefined) {
+      bootstrapTemplateParameters.StagingResourcesOnly = `${params.stagingResourcesOnly}`;
+    }
 
     return current.update(bootstrapTemplate, bootstrapTemplateParameters, {
       ...options,
       terminationProtection: options.terminationProtection ?? current.terminationProtection,
     });
+  }
+
+  /**
+   * Report the trust settings of the bootstrap roles, and validate the execution policies against them
+   */
+  private async validateRoleSettings(
+    partition: string,
+    trustedAccounts: string[],
+    trustedAccountsForLookup: string[],
+    cloudFormationExecutionPolicies: string[],
+  ) {
+    await this.ioHelper.defaults.info(
+      `Trusted accounts for deployment: ${trustedAccounts.length > 0 ? trustedAccounts.join(', ') : '(none)'}`,
+    );
+    await this.ioHelper.defaults.info(
+      `Trusted accounts for lookup: ${trustedAccountsForLookup.length > 0 ? trustedAccountsForLookup.join(', ') : '(none)'}`,
+    );
+
+    if (trustedAccounts.length === 0 && cloudFormationExecutionPolicies.length === 0) {
+      // For self-trust it's okay to default to AdministratorAccess, and it improves the usability of bootstrapping a lot.
+      //
+      // We don't actually make the implicitly policy a physical parameter. The template will infer it instead,
+      // we simply do the UI advertising that behavior here.
+      //
+      // If we DID make it an explicit parameter, we wouldn't be able to tell the difference between whether
+      // we inferred it or whether the user told us, and the sequence:
+      //
+      // $ cdk bootstrap
+      // $ cdk bootstrap --trust 1234
+      //
+      // Would leave AdministratorAccess policies with a trust relationship, without the user explicitly
+      // approving the trust policy.
+      const implicitPolicy = `arn:${partition}:iam::aws:policy/AdministratorAccess`;
+      await this.ioHelper.defaults.warn(
+        `Using default execution policy of '${implicitPolicy}'. Pass '--cloudformation-execution-policies' to customize.`,
+      );
+    } else if (cloudFormationExecutionPolicies.length === 0) {
+      throw new ToolkitError(
+        'MissingExecutionPoliciesForTrust',
+        `Please pass \'--cloudformation-execution-policies\' when using \'--trust\' to specify deployment permissions. Try a managed policy of the form \'arn:${partition}:iam::aws:policy/<PolicyName>\'.`,
+      );
+    } else {
+      // Remind people what the current settings are
+      await this.ioHelper.defaults.info(`Execution policies: ${cloudFormationExecutionPolicies.join(', ')}`);
+    }
   }
 
   private async getPolicyName(
@@ -427,6 +456,26 @@ const CREATE_NEW_KEY = '';
  * Parameter value indicating the use of the default, CDK provided permissions boundary for bootstrap-template.yml
  */
 const CDK_BOOTSTRAP_PERMISSIONS_BOUNDARY = 'CDK_BOOTSTRAP_PERMISSIONS_BOUNDARY';
+
+/**
+ * Bootstrap options that configure the IAM roles cannot be used when only the staging resources are created
+ */
+function validateStagingResourcesOnly(params: BootstrappingParameters) {
+  const conflicting = [
+    params.trustedAccounts?.length ? '--trust' : undefined,
+    params.trustedAccountsForLookup?.length ? '--trust-for-lookup' : undefined,
+    params.cloudFormationExecutionPolicies?.length ? '--cloudformation-execution-policies' : undefined,
+    params.examplePermissionsBoundary ? '--example-permissions-boundary' : undefined,
+    params.customPermissionsBoundary ? '--custom-permissions-boundary' : undefined,
+    params.applyPermissionsBoundaryToAllRoles ? '--apply-permissions-boundary-to-all-roles' : undefined,
+  ].filter((x): x is string => x !== undefined);
+  if (conflicting.length > 0) {
+    throw new ToolkitError(
+      'StagingResourcesOnlyConflict',
+      `--staging-resources-only does not create any IAM roles, so it cannot be combined with ${conflicting.join(', ')}`,
+    );
+  }
+}
 
 /**
  * Split an array-like CloudFormation parameter on ,

@@ -171,6 +171,19 @@ export interface BootstrappingParameters {
   readonly applyPermissionsBoundaryToAllRoles?: boolean;
 
   /**
+   * Whether to create only the staging resources (the file asset bucket, the
+   * container asset repository and the bootstrap version parameter), and none
+   * of the IAM roles.
+   *
+   * Use this when the identity that bootstraps the environment is not allowed
+   * to create IAM roles. An environment bootstrapped this way can be deployed
+   * to with the `CliCredentialsStackSynthesizer`.
+   *
+   * @default - template default (false)
+   */
+  readonly stagingResourcesOnly?: boolean;
+
+  /**
    * Whether to deny AssumeRole calls with an ExternalId
    *
    * @default - template default (true)
