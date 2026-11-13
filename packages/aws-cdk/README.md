@@ -1364,8 +1364,9 @@ which uses the credentials of the CLI instead of assuming the bootstrap roles. B
 `--staging-resources-only` cannot be combined with `--trust`, `--trust-for-lookup`,
 `--cloudformation-execution-policies` or the permissions boundary options.
 
-Running `--staging-resources-only` against an existing bootstrap stack removes its IAM roles. Use
-`--no-staging-resources-only` to create them again.
+Running `--staging-resources-only` against an existing bootstrap stack removes its IAM roles, so stacks that use
+the `DefaultStackSynthesizer` can no longer be deployed with those roles. Use `--no-staging-resources-only` to create
+them again.
 
 ### `cdk gc`
 

@@ -1193,6 +1193,24 @@ describe('Bootstrapping v2', () => {
       expect(mockIAMClient).not.toHaveReceivedCommand(CreatePolicyCommand);
     });
 
+    test('explains how to re-enable the roles when the value comes from the previous deployment', async () => {
+      mockTheToolkitInfo({
+        Parameters: [{ ParameterKey: 'StagingResourcesOnly', ParameterValue: 'true' }],
+      });
+
+      await expect(bootstrapper.bootstrapEnvironment(env, sdk, {
+        parameters: { trustedAccounts: ['111111111111'], cloudFormationExecutionPolicies: ['arn:policy'] },
+      })).rejects.toThrow(/was bootstrapped with --staging-resources-only.*Pass --no-staging-resources-only to create the roles/);
+
+      expect(mockDeployStack).not.toHaveBeenCalled();
+    });
+
+    test('cannot be used with the legacy bootstrap template', async () => {
+      await expect(new Bootstrapper({ source: 'legacy' }, ioHelper).bootstrapEnvironment(env, sdk, {
+        parameters: { stagingResourcesOnly: true },
+      })).rejects.toThrow('--staging-resources-only can only be passed for the modern bootstrap experience.');
+    });
+
     test('can be combined with options that do not configure roles', async () => {
       await bootstrapper.bootstrapEnvironment(env, sdk, {
         parameters: {

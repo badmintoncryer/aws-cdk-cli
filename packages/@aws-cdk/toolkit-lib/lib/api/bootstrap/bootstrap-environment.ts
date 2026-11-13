@@ -66,6 +66,9 @@ export class Bootstrapper {
     if (params.qualifier) {
       throw new ToolkitError('QualifierRequiresModernBootstrap', '--qualifier can only be passed for the modern bootstrap experience.');
     }
+    if (params.stagingResourcesOnly !== undefined) {
+      throw new ToolkitError('StagingResourcesOnlyRequiresModernBootstrap', '--staging-resources-only can only be passed for the modern bootstrap experience.');
+    }
 
     const toolkitStackName = options.toolkitStackName ?? DEFAULT_TOOLKIT_STACK_NAME;
     const current = await BootstrapStack.lookup(sdkProvider, environment, toolkitStackName, this.ioHelper);
@@ -105,7 +108,7 @@ export class Bootstrapper {
     const stagingResourcesOnly = params.stagingResourcesOnly
       ?? (templateParameters.includes('StagingResourcesOnly') && current.parameters.StagingResourcesOnly === 'true');
     if (stagingResourcesOnly) {
-      validateStagingResourcesOnly(params);
+      validateStagingResourcesOnly(params, params.stagingResourcesOnly === undefined);
       await this.ioHelper.defaults.info('Creating only the staging resources. No IAM roles will be created.');
     }
 
@@ -460,7 +463,7 @@ const CDK_BOOTSTRAP_PERMISSIONS_BOUNDARY = 'CDK_BOOTSTRAP_PERMISSIONS_BOUNDARY';
 /**
  * Bootstrap options that configure the IAM roles cannot be used when only the staging resources are created
  */
-function validateStagingResourcesOnly(params: BootstrappingParameters) {
+function validateStagingResourcesOnly(params: BootstrappingParameters, fromPreviousDeployment: boolean) {
   const conflicting = [
     params.trustedAccounts?.length ? '--trust' : undefined,
     params.trustedAccountsForLookup?.length ? '--trust-for-lookup' : undefined,
@@ -472,7 +475,9 @@ function validateStagingResourcesOnly(params: BootstrappingParameters) {
   if (conflicting.length > 0) {
     throw new ToolkitError(
       'StagingResourcesOnlyConflict',
-      `--staging-resources-only does not create any IAM roles, so it cannot be combined with ${conflicting.join(', ')}`,
+      fromPreviousDeployment
+        ? `this environment was bootstrapped with --staging-resources-only, which does not create any IAM roles, so it cannot be combined with ${conflicting.join(', ')}. Pass --no-staging-resources-only to create the roles`
+        : `--staging-resources-only does not create any IAM roles, so it cannot be combined with ${conflicting.join(', ')}`,
     );
   }
 }
