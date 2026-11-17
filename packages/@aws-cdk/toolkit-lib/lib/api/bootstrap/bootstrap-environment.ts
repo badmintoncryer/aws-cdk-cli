@@ -104,12 +104,22 @@ export class Bootstrapper {
       throw new ToolkitError('StagingResourcesOnlyNotSupported', 'The selected bootstrap template does not accept the StagingResourcesOnly parameter');
     }
 
-    // When the flag is not given, the value from the previous deployment is reused, like all other template parameters
+    // When the flag is not given, the value from the previous deployment is reused (like all other template
+    // parameters), unless previous parameters are ignored, in which case the template default (false) applies.
+    const previousStagingResourcesOnly = templateParameters.includes('StagingResourcesOnly') && current.parameters.StagingResourcesOnly === 'true';
     const stagingResourcesOnly = params.stagingResourcesOnly
-      ?? (templateParameters.includes('StagingResourcesOnly') && current.parameters.StagingResourcesOnly === 'true');
+      ?? ((options.usePreviousParameters ?? true) && previousStagingResourcesOnly);
     if (stagingResourcesOnly) {
       validateStagingResourcesOnly(params, params.stagingResourcesOnly === undefined);
       await this.ioHelper.defaults.info('Creating only the staging resources. No IAM roles will be created.');
+
+      // An existing (modern) bootstrap stack has parameters, and its roles are about to be deleted
+      if (!previousStagingResourcesOnly && Object.keys(current.parameters).length > 0) {
+        await this.ioHelper.defaults.warn(
+          'The IAM roles of the existing bootstrap stack will be deleted. Stacks that were deployed with these roles ' +
+          'cannot be updated or deleted until the roles are created again with --no-staging-resources-only.',
+        );
+      }
     }
 
     if (params.createCustomerMasterKey !== undefined && params.kmsKeyId) {
@@ -476,7 +486,7 @@ function validateStagingResourcesOnly(params: BootstrappingParameters, fromPrevi
     throw new ToolkitError(
       'StagingResourcesOnlyConflict',
       fromPreviousDeployment
-        ? `this environment was bootstrapped with --staging-resources-only, which does not create any IAM roles, so it cannot be combined with ${conflicting.join(', ')}. Pass --no-staging-resources-only to create the roles`
+        ? `this environment was bootstrapped with --staging-resources-only, which does not create any IAM roles, so it cannot be combined with ${conflicting.join(', ')}; pass --no-staging-resources-only to create the roles`
         : `--staging-resources-only does not create any IAM roles, so it cannot be combined with ${conflicting.join(', ')}`,
     );
   }

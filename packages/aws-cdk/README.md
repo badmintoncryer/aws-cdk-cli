@@ -1364,9 +1364,14 @@ which uses the credentials of the CLI instead of assuming the bootstrap roles. B
 `--staging-resources-only` cannot be combined with `--trust`, `--trust-for-lookup`,
 `--cloudformation-execution-policies` or the permissions boundary options.
 
-Running `--staging-resources-only` against an existing bootstrap stack removes its IAM roles, so stacks that use
-the `DefaultStackSynthesizer` can no longer be deployed with those roles. Use `--no-staging-resources-only` to create
-them again.
+Running `--staging-resources-only` against an existing bootstrap stack deletes its IAM roles. Stacks that were
+deployed with those roles (for example with the `DefaultStackSynthesizer`) use the CloudFormation execution role
+as their service role, and cannot be updated or deleted until you create the roles again with
+`--no-staging-resources-only`. The CLI warns about this before it updates the bootstrap stack.
+
+Like the other bootstrap options, the setting is kept when you bootstrap the environment again without the flag.
+With `--no-previous-parameters`, it goes back to the default and the roles are created, unless you pass
+`--staging-resources-only` again.
 
 ### `cdk gc`
 

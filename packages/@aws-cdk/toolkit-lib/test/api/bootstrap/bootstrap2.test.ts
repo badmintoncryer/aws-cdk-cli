@@ -1200,9 +1200,50 @@ describe('Bootstrapping v2', () => {
 
       await expect(bootstrapper.bootstrapEnvironment(env, sdk, {
         parameters: { trustedAccounts: ['111111111111'], cloudFormationExecutionPolicies: ['arn:policy'] },
-      })).rejects.toThrow(/was bootstrapped with --staging-resources-only.*Pass --no-staging-resources-only to create the roles/);
+      })).rejects.toThrow(/was bootstrapped with --staging-resources-only.*; pass --no-staging-resources-only to create the roles/);
 
       expect(mockDeployStack).not.toHaveBeenCalled();
+    });
+
+    test('uses the template default when previous parameters are not used', async () => {
+      mockTheToolkitInfo({
+        Parameters: [
+          { ParameterKey: 'StagingResourcesOnly', ParameterValue: 'true' },
+          { ParameterKey: 'TrustedAccounts', ParameterValue: '111111111111' },
+        ],
+      });
+
+      // The roles are created again, so the trust settings are validated
+      await expect(bootstrapper.bootstrapEnvironment(env, sdk, {
+        parameters: {},
+        usePreviousParameters: false,
+      })).rejects.toThrow(/--cloudformation-execution-policies/);
+    });
+
+    test('warns that the roles of an existing bootstrap stack will be deleted', async () => {
+      mockTheToolkitInfo({
+        Parameters: [{ ParameterKey: 'Qualifier', ParameterValue: 'hnb659fds' }],
+      });
+
+      await bootstrapper.bootstrapEnvironment(env, sdk, { parameters: { stagingResourcesOnly: true } });
+
+      expect(stderrText()).toContain('The IAM roles of the existing bootstrap stack will be deleted');
+    });
+
+    test.each([
+      ['a new bootstrap stack', undefined],
+      ['a bootstrap stack that is already staging resources only', [
+        { ParameterKey: 'Qualifier', ParameterValue: 'hnb659fds' },
+        { ParameterKey: 'StagingResourcesOnly', ParameterValue: 'true' },
+      ]],
+    ])('does not warn about deleting roles for %s', async (_, existingParameters) => {
+      if (existingParameters) {
+        mockTheToolkitInfo({ Parameters: existingParameters });
+      }
+
+      await bootstrapper.bootstrapEnvironment(env, sdk, { parameters: { stagingResourcesOnly: true } });
+
+      expect(stderrText()).not.toContain('will be deleted');
     });
 
     test('cannot be used with the legacy bootstrap template', async () => {
