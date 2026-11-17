@@ -1220,23 +1220,41 @@ describe('Bootstrapping v2', () => {
       })).rejects.toThrow(/--cloudformation-execution-policies/);
     });
 
-    test('warns that the roles of an existing bootstrap stack will be deleted', async () => {
-      mockTheToolkitInfo({
-        Parameters: [{ ParameterKey: 'Qualifier', ParameterValue: 'hnb659fds' }],
+    describe('switching an existing bootstrap stack with roles', () => {
+      const existingStackWithRoles = [
+        { ParameterKey: 'Qualifier', ParameterValue: 'hnb659fds' },
+        { ParameterKey: 'CloudFormationExecutionPolicies', ParameterValue: '' },
+      ];
+
+      test('is refused without force', async () => {
+        mockTheToolkitInfo({ Parameters: existingStackWithRoles });
+
+        await expect(bootstrapper.bootstrapEnvironment(env, sdk, { parameters: { stagingResourcesOnly: true } }))
+          .rejects.toThrow(/deletes the IAM roles of the existing bootstrap stack .*; pass --force to continue/);
+        expect(mockDeployStack).not.toHaveBeenCalled();
       });
 
-      await bootstrapper.bootstrapEnvironment(env, sdk, { parameters: { stagingResourcesOnly: true } });
+      test('warns that the roles will be deleted with force', async () => {
+        mockTheToolkitInfo({ Parameters: existingStackWithRoles });
 
-      expect(stderrText()).toContain('The IAM roles of the existing bootstrap stack will be deleted');
+        await bootstrapper.bootstrapEnvironment(env, sdk, { forceDeployment: true, parameters: { stagingResourcesOnly: true } });
+
+        expect(stderrText()).toContain('The IAM roles of the existing bootstrap stack will be deleted');
+        expect(mockDeployStack).toHaveBeenCalled();
+      });
     });
 
     test.each([
       ['a new bootstrap stack', undefined],
       ['a bootstrap stack that is already staging resources only', [
         { ParameterKey: 'Qualifier', ParameterValue: 'hnb659fds' },
+        { ParameterKey: 'CloudFormationExecutionPolicies', ParameterValue: '' },
         { ParameterKey: 'StagingResourcesOnly', ParameterValue: 'true' },
       ]],
-    ])('does not warn about deleting roles for %s', async (_, existingParameters) => {
+      ['a bootstrap stack from a custom template without roles', [
+        { ParameterKey: 'Qualifier', ParameterValue: 'hnb659fds' },
+      ]],
+    ])('does not require force or warn about deleting roles for %s', async (_, existingParameters) => {
       if (existingParameters) {
         mockTheToolkitInfo({ Parameters: existingParameters });
       }
@@ -1244,6 +1262,7 @@ describe('Bootstrapping v2', () => {
       await bootstrapper.bootstrapEnvironment(env, sdk, { parameters: { stagingResourcesOnly: true } });
 
       expect(stderrText()).not.toContain('will be deleted');
+      expect(mockDeployStack).toHaveBeenCalled();
     });
 
     test('cannot be used with the legacy bootstrap template', async () => {
@@ -1303,4 +1322,3 @@ describe('Bootstrapping v2', () => {
     });
   });
 });
-

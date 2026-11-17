@@ -113,12 +113,20 @@ export class Bootstrapper {
       validateStagingResourcesOnly(params, params.stagingResourcesOnly === undefined);
       await this.ioHelper.defaults.info('Creating only the staging resources. No IAM roles will be created.');
 
-      // An existing (modern) bootstrap stack has parameters, and its roles are about to be deleted
-      if (!previousStagingResourcesOnly && Object.keys(current.parameters).length > 0) {
-        await this.ioHelper.defaults.warn(
-          'The IAM roles of the existing bootstrap stack will be deleted. Updating or deleting stacks that use the ' +
-          'CloudFormation execution role as their service role will fail, until the roles are created again with --no-staging-resources-only.',
-        );
+      // Switching an existing bootstrap stack that has roles deletes them. Stacks that use the CloudFormation
+      // execution role as their service role can then no longer be updated or deleted, and the people who use
+      // this option typically cannot create the roles again, so require an explicit --force.
+      const existingStackHasRoles = !previousStagingResourcesOnly && current.parameters.CloudFormationExecutionPolicies !== undefined;
+      if (existingStackHasRoles) {
+        const consequence = 'updating or deleting stacks that use the CloudFormation execution role as their service role will fail ' +
+          'until the roles are created again with --no-staging-resources-only';
+        if (!options.forceDeployment) {
+          throw new ToolkitError(
+            'StagingResourcesOnlyDeletesRoles',
+            `--staging-resources-only deletes the IAM roles of the existing bootstrap stack ${toolkitStackName}, and ${consequence}; pass --force to continue`,
+          );
+        }
+        await this.ioHelper.defaults.warn(`The IAM roles of the existing bootstrap stack will be deleted: ${consequence}`);
       }
     }
 

@@ -208,7 +208,10 @@ export interface BootstrapParameters {
    * to create IAM roles. An environment bootstrapped this way can be deployed
    * to with the `CliCredentialsStackSynthesizer`.
    *
-   * @default - template default (false)
+   * Switching an existing bootstrap stack that has IAM roles to staging
+   * resources only deletes those roles, and requires `forceDeployment`.
+   *
+   * @default - the value of the previous deployment when previous parameters are used, otherwise false
    */
   readonly stagingResourcesOnly?: boolean;
 }

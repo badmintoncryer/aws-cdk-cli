@@ -531,7 +531,7 @@ export interface BootstrapOptions {
   readonly applyPermissionsBoundaryToAllRoles?: boolean;
 
   /**
-   * Create only the staging resources (asset bucket and container asset repository), without any IAM roles. Use with the CliCredentialsStackSynthesizer.
+   * Create only the staging resources (asset bucket, its KMS key, container asset repository and version parameter), without any IAM roles. Use with the CliCredentialsStackSynthesizer. Deleting the roles of an existing bootstrap stack requires --force.
    *
    * @default - undefined
    */

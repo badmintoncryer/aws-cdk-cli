@@ -272,7 +272,7 @@ export function parseCommandLineArguments(args: Array<string>): any {
         .option('staging-resources-only', {
           default: undefined,
           type: 'boolean',
-          desc: 'Create only the staging resources (asset bucket and container asset repository), without any IAM roles. Use with the CliCredentialsStackSynthesizer.',
+          desc: 'Create only the staging resources (asset bucket, its KMS key, container asset repository and version parameter), without any IAM roles. Use with the CliCredentialsStackSynthesizer. Deleting the roles of an existing bootstrap stack requires --force.',
         })
         .option('bootstrap-customer-key', {
           default: undefined,
