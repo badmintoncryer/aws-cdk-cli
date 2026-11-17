@@ -116,8 +116,8 @@ export class Bootstrapper {
       // An existing (modern) bootstrap stack has parameters, and its roles are about to be deleted
       if (!previousStagingResourcesOnly && Object.keys(current.parameters).length > 0) {
         await this.ioHelper.defaults.warn(
-          'The IAM roles of the existing bootstrap stack will be deleted. Stacks that were deployed with these roles ' +
-          'cannot be updated or deleted until the roles are created again with --no-staging-resources-only.',
+          'The IAM roles of the existing bootstrap stack will be deleted. Updating or deleting stacks that use the ' +
+          'CloudFormation execution role as their service role will fail, until the roles are created again with --no-staging-resources-only.',
         );
       }
     }

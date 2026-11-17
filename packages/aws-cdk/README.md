@@ -1366,7 +1366,7 @@ which uses the credentials of the CLI instead of assuming the bootstrap roles. B
 
 Running `--staging-resources-only` against an existing bootstrap stack deletes its IAM roles. Stacks that were
 deployed with those roles (for example with the `DefaultStackSynthesizer`) use the CloudFormation execution role
-as their service role, and cannot be updated or deleted until you create the roles again with
+as their service role, so CloudFormation fails to update or delete them until you create the roles again with
 `--no-staging-resources-only`. The CLI warns about this before it updates the bootstrap stack.
 
 Like the other bootstrap options, the setting is kept when you bootstrap the environment again without the flag.
